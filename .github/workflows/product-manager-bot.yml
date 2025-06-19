@@ -159,7 +159,7 @@ jobs:
           script: |
             console.log('Issue number:', context.issue.number);
             console.log('Reason for architecture review:', `${{ steps.parse_decision.outputs.reason }}`);
-            const accumulatedSummary = `${{ steps.track-cost.outputs.accumulated-summary }}`;
+            const accumulatedSummary = String.raw`${{ steps.track-cost.outputs.accumulated-summary }}`;
             github.rest.repos.createDispatchEvent({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -180,7 +180,7 @@ jobs:
           script: |
             console.log('Issue number:', context.issue.number);
             console.log('Reason for direct implementation:', `${{ steps.parse_decision.outputs.reason }}`);
-            const accumulatedSummary = `${{ steps.track-cost.outputs.accumulated-summary }}`;
+            const accumulatedSummary = String.raw`${{ steps.track-cost.outputs.accumulated-summary }}`;
             github.rest.repos.createDispatchEvent({
               owner: context.repo.owner,
               repo: context.repo.repo,

@@ -242,7 +242,7 @@ jobs:
             const prNumber = process.env.PR_NUMBER;
             console.log('PR number:', prNumber);
             console.log('Reason for triggering:', `${{ steps.parse_fixes_decision.outputs.reason }}`);
-            const accumulatedSummary = `${{ steps.track-cost.outputs.accumulated-summary }}`;
+            const accumulatedSummary = String.raw`${{ steps.track-cost.outputs.accumulated-summary }}`;
             github.rest.repos.createDispatchEvent({
               owner: context.repo.owner,
               repo: context.repo.repo,

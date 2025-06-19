@@ -152,7 +152,7 @@ jobs:
           script: |
             console.log('Issue number:', process.env.ISSUE_NUMBER);
             console.log('Reason for triggering:', `${{ steps.parse_implementation_decision.outputs.reason }}`);
-            const accumulatedSummary = `${{ steps.track-cost.outputs.accumulated-summary }}`;
+            const accumulatedSummary = String.raw`${{ steps.track-cost.outputs.accumulated-summary }}`;
             github.rest.repos.createDispatchEvent({
               owner: context.repo.owner,
               repo: context.repo.repo,
