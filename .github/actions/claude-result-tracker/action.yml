@@ -1,0 +1,183 @@
+name: "Claude Result Tracker"
+description: "Parse Claude execution results and update issue with cost, duration, and token usage information"
+inputs:
+  github-token:
+    description: "GitHub token for updating issues"
+    required: true
+  issue-number:
+    description: "Issue number to update"
+    required: true
+  cost-name:
+    description: "Name of the bot/workflow for result tracking"
+    required: true
+  cost-file-path:
+    description: "Path to Claude execution output JSON file"
+    required: false
+    default: "/home/runner/work/_temp/claude-execution-output.json"
+  accumulated-summary:
+    description: "Accumulated summary data from previous bots (JSON string)"
+    required: false
+    default: "[]"
+outputs:
+  total-cost:
+    description: "Total cost in USD"
+    value: ${{ steps.parse-and-update.outputs.total_cost }}
+  accumulated-summary:
+    description: "Updated accumulated summary including current bot's data (JSON string)"
+    value: ${{ steps.parse-and-update.outputs.accumulated_summary }}
+runs:
+  using: "composite"
+  steps:
+    - name: Parse Claude execution results and update issue
+      id: parse-and-update
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const fs = require('fs');
+          const path = '${{ inputs.cost-file-path }}';
+
+          // Helper function to format numbers with commas
+          function formatNumber(num) {
+            return Math.round(num).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+          }
+
+          // Parse accumulated summary from previous bots
+          let accumulatedSummary = [];
+          try {
+            const accumulatedInput = '${{ inputs.accumulated-summary }}';
+            if (accumulatedInput && accumulatedInput !== '[]') {
+              accumulatedSummary = JSON.parse(accumulatedInput);
+            }
+          } catch (error) {
+            console.log('Error parsing accumulated summary, starting fresh:', error.message);
+            accumulatedSummary = [];
+          }
+
+          let totalCost = 0;
+          let durationMinutes = 0;
+          let totalInputTokens = 0;
+          let outputTokens = 0;
+
+          // Parse Claude execution results
+          if (fs.existsSync(path)) {
+            try {
+              const fileContent = fs.readFileSync(path, 'utf8');
+              const data = JSON.parse(fileContent);
+              
+              // Extract data from the "result" type object
+              let resultObject;
+              if (Array.isArray(data)) {
+                resultObject = data.find(item => item.type === 'result');
+              } else if (data.type === 'result') {
+                resultObject = data;
+              }
+              
+              if (resultObject) {
+                totalCost = resultObject.total_cost || 0;
+                const durationMs = resultObject.duration_ms || 0;
+                const inputTokens = resultObject.usage?.input_tokens || 0;
+                outputTokens = resultObject.usage?.output_tokens || 0;
+                const cacheCreationTokens = resultObject.usage?.cache_creation_input_tokens || 0;
+                const cacheReadTokens = resultObject.usage?.cache_read_input_tokens || 0;
+                
+                // Calculate total input tokens including cache
+                totalInputTokens = inputTokens + cacheCreationTokens + cacheReadTokens;
+                
+                // Convert duration to minutes
+                durationMinutes = durationMs / 60000;
+                
+                console.log(`Results captured: ${totalCost} USD, ${durationMinutes.toFixed(2)} min, ${totalInputTokens} input tokens, ${outputTokens} output tokens`);
+              } else {
+                console.log('No result object found in output file, defaulting to 0');
+              }
+            } catch (error) {
+              console.log('Error parsing output file, defaulting to 0:', error.message);
+            }
+          } else {
+            console.log(`No output file found at ${path}, defaulting to 0`);
+          }
+
+          // Add current bot's result to accumulated summary if cost > 0
+          if (totalCost > 0) {
+            accumulatedSummary.push({
+              bot: '${{ inputs.cost-name }}',
+              duration: durationMinutes,
+              inputTokens: totalInputTokens,
+              outputTokens: outputTokens,
+              cost: totalCost
+            });
+          }
+
+          // Set outputs
+          core.setOutput('total_cost', totalCost.toString());
+          core.setOutput('duration_minutes', durationMinutes.toFixed(2));
+          core.setOutput('input_tokens', Math.round(totalInputTokens).toString());
+          core.setOutput('output_tokens', outputTokens.toString());
+          core.setOutput('accumulated_summary', JSON.stringify(accumulatedSummary));
+
+          // Update issue with execution results using accumulated summary
+          if (accumulatedSummary.length > 0) {
+            const issueNumber = parseInt('${{ inputs.issue-number }}');
+            
+            // Get current issue
+            const { data: issue } = await github.rest.issues.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber
+            });
+            
+            const issueBody = issue.body || '';
+            
+            // Calculate totals from accumulated summary
+            let totalDuration = 0;
+            let totalInputSum = 0;
+            let totalOutputSum = 0;
+            let totalCostSum = 0;
+            
+            // Build table rows from accumulated summary
+            const tableRows = accumulatedSummary.map(entry => {
+              totalDuration += entry.duration;
+              totalInputSum += entry.inputTokens;
+              totalOutputSum += entry.outputTokens;
+              totalCostSum += entry.cost;
+              
+              const costInJPY = entry.cost * 150;
+              return `| ${entry.bot} | ${entry.duration.toFixed(2)} | ${formatNumber(entry.inputTokens)} | ${formatNumber(entry.outputTokens)} | $${entry.cost.toFixed(4)} | ¥${costInJPY.toFixed(0)} |`;
+            });
+            
+            // Build total row
+            const totalCostInJPY = totalCostSum * 150;
+            const totalEntry = `| **Total** | ${totalDuration.toFixed(2)} | ${formatNumber(totalInputSum)} | ${formatNumber(totalOutputSum)} | $${totalCostSum.toFixed(4)} | ¥${totalCostInJPY.toFixed(0)} |`;
+            
+            // Build complete table
+            const tableContent = tableRows.join('\n') + '\n' + totalEntry;
+            
+            const newResultsSection = `## Execution Summary
+
+          | Bot | Duration (min) | Input Tokens | Output Tokens | Cost | Cost (JPY) |
+          |-----|----------------|--------------|---------------|------|-----------|
+          ${tableContent}
+
+          `;
+            
+            let updatedBody;
+            
+            // Check if results section already exists and replace it
+            if (issueBody.includes('## Execution Summary')) {
+              updatedBody = issueBody.replace(/## Execution Summary[\s\S]*?(?=\n##|\n$|$)/, newResultsSection);
+            } else {
+              // Create new results section at the beginning
+              updatedBody = newResultsSection + issueBody;
+            }
+            
+            // Update the issue
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              body: updatedBody
+            });
+            
+            console.log(`Updated issue #${issueNumber} with accumulated summary from ${accumulatedSummary.length} bot(s)`);
+          }

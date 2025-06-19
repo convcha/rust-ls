@@ -1,0 +1,185 @@
+name: Engineer Bot - Implementation
+on:
+  repository_dispatch:
+    types: ["🛠️ Lets Build This"]
+
+jobs:
+  engineer:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      attestations: none
+      checks: write
+      contents: write
+      deployments: read
+      discussions: write
+      id-token: none
+      issues: write
+      models: read
+      packages: read
+      pages: read
+      pull-requests: write
+      security-events: read
+      statuses: write
+    # Trigger when repository_dispatch event is received
+    if: github.event_name == 'repository_dispatch'
+    # Add specific environment variables to help identify the issue
+    env:
+      ISSUE_NUMBER: ${{ github.event.client_payload.issue_number || github.event.issue.number }}
+      ACCUMULATED_SUMMARY: ${{ github.event.client_payload.accumulated_summary }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # <!-- INSERT SETUP STEPS HERE -->
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
+
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-index-
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-build-
+
+      - uses: convcha/claude-code-action@main
+        env:
+          NODE_VERSION: "lts/*"
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          timeout_minutes: "30"
+          allowed_tools: "Task,Bash,Glob,Grep,LS,Read,Edit,MultiEdit,Write,NotebookRead,NotebookEdit,TodoRead,TodoWrite,mcp__github_file_ops__commit_files,mcp__github_file_ops__delete_files,mcp__github_file_ops__update_claude_comment,mcp__github__add_issue_comment,mcp__github__add_pull_request_review_comment_to_pending_review,mcp__github__assign_copilot_to_issue,mcp__github__create_and_submit_pull_request_review,mcp__github__create_branch,mcp__github__create_issue,mcp__github__create_or_update_file,mcp__github__create_pending_pull_request_review,mcp__github__create_pull_request,mcp__github__delete_pending_pull_request_review,mcp__github__get_code_scanning_alert,mcp__github__get_commit,mcp__github__get_file_contents,mcp__github__get_issue,mcp__github__get_issue_comments,mcp__github__get_me,mcp__github__get_notification_details,mcp__github__get_pull_request,mcp__github__get_pull_request_comments,mcp__github__get_pull_request_diff,mcp__github__get_pull_request_files,mcp__github__get_pull_request_reviews,mcp__github__get_pull_request_status,mcp__github__get_secret_scanning_alert,mcp__github__get_tag,mcp__github__list_branches,mcp__github__list_code_scanning_alerts,mcp__github__list_commits,mcp__github__list_issues,mcp__github__list_notifications,mcp__github__list_pull_requests,mcp__github__list_secret_scanning_alerts,mcp__github__list_tags,mcp__github__push_files,mcp__github__request_copilot_review,mcp__github__search_code,mcp__github__search_issues,mcp__github__search_repositories,mcp__github__search_users,mcp__github__submit_pending_pull_request_review,mcp__github__update_issue,mcp__github__update_pull_request,mcp__github__update_pull_request_branch"
+          disallowed_tools: "mcp__github__create_repository,mcp__github__delete_file,mcp__github__dismiss_notification,mcp__github__fork_repository,mcp__github__manage_notification_subscription,mcp__github__manage_repository_notification_subscription,mcp__github__mark_all_notifications_read,mcp__github__merge_pull_request"
+          custom_instructions: |
+            YOU MUST: Always speak, respond and write content in ${{ vars.MACHINERS_PLATOON_LANG || 'English' }}.
+            
+            **CRITICAL IMPLEMENTATION PRINCIPLE**: Avoid over-engineering at all costs. Always implement the simplest possible solution that meets the requirements. Choose straightforward, minimal code over complex implementations. When in doubt, go with the simpler approach. Resist adding unnecessary abstractions, patterns, or complexity.
+            
+            You are an Engineer Bot specialized in implementing features for the ${{ github.event.repository.name }} project.
+
+            Your responsibilities:
+            1. Create a new branch for the implementation
+            2. Implement the feature according to the architectural plan
+            3. Follow existing code patterns and conventions
+            4. Write tests for new functionality
+            5. Ensure code quality and validation (e.g. lint, format and typecheck)
+            6. Create a pull request using mcp__github__create_pull_request with detailed description that includes an "## Issues" section at the top of the PR body with a link to the corresponding issue
+            7. After creating the PR, update the corresponding issue to add a "## Pull Requests" section at the top of the issue body with a link to the created PR
+            8. **CRITICAL**: NEVER remove the '${{ vars.MACHINERS_PLATOON_TRIGGER_LABEL || '🤖 Machiners Platoon' }}' label from Issues or PRs. This label must always be preserved.
+
+            Implementation guidelines:
+            - Follow existing code patterns and conventions
+            - Implement proper error handling
+            - Ensure proper integration with existing systems
+            - Maintain code quality and consistency
+            - Add proper documentation and comments
+            - **PRIORITIZE SIMPLICITY**: Write the minimal code needed to solve the problem effectively
+
+            Before starting implementation:
+            1. Read the issue description and architectural plan
+            2. Understand the existing codebase structure and patterns
+            3. Plan the implementation approach
+
+            Implementation process:
+            1. Create a new branch: `git checkout -b feature/issue-{issue-number}`
+            2. Implement the feature step by step
+            3. Test the implementation
+            4. Run your validation command (e.g. lint, format and typecheck) to ensure format and lint pass
+            5. Stage all files with `git add .` before committing
+            6. Commit changes with descriptive messages
+            7. Push the branch
+            8. Create a pull request using mcp__github__create_pull_request
+
+            Always ensure:
+            - Code follows existing patterns and conventions
+            - Tests are written and passing
+            - No linting errors
+            - Proper error handling
+            - Quality standards are maintained
+            - Validation (e.g. lint, format and typecheck) passes completely
+          direct_prompt: |
+            YOU MUST: Always speak, respond and write content in ${{ vars.MACHINERS_PLATOON_LANG || 'English' }}.
+            
+            This issue is ready for implementation. Please:
+            1. Create a new feature branch
+            2. Implement the feature according to the architectural plan in the issue
+            3. Follow existing code patterns and conventions
+            5. Write appropriate tests
+            6. Ensure code quality standards are met
+            7. **IMPORTANT: After implementation is complete, run validation (e.g. lint, format and typecheck) to ensure quality standards are met**
+            8. Create a pull request using mcp__github__create_pull_request with a detailed description of the implementation that includes an "## Issues" section at the very top of the PR body with a link to the corresponding issue
+            9. Add '${{ vars.MACHINERS_PLATOON_TRIGGER_LABEL || '🤖 Machiners Platoon' }}' label to the PR
+            10. **IMPORTANT**: After creating the PR, update the corresponding issue by adding a "## Pull Requests" section at the very top of the issue body with a link to the created PR using mcp__github__update_issue.
+            11. **CRITICAL**: NEVER remove the '${{ vars.MACHINERS_PLATOON_TRIGGER_LABEL || '🤖 Machiners Platoon' }}' label from Issues or PRs. This label must always be preserved.
+
+            Make sure to read the architectural plan and requirements carefully before starting implementation.
+
+            **CRITICAL: Before creating the pull request, you MUST run validation (e.g. lint, format and typecheck) and ensure all quality checks pass.**
+
+            After creating the pull request and updating the issue with the PR link, ensure it is ready for architectural review.
+
+      - name: Track Claude execution cost
+        id: track-cost
+        uses: ./.github/actions/claude-result-tracker
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          issue-number: ${{ env.ISSUE_NUMBER }}
+          cost-name: "Engineer Bot"
+          accumulated-summary: ${{ env.ACCUMULATED_SUMMARY }}
+
+      # Trigger the Architect Review Bot after PR creation
+      - name: Trigger Architect Review Bot
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          script: |
+            // Get the PR number from recent activity
+            const { data: prs } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              sort: 'created',
+              direction: 'desc',
+              per_page: 1
+            });
+
+            if (prs.length > 0) {
+              const prNumber = prs[0].number;
+              console.log('Triggering architect review for PR:', prNumber);
+              const accumulatedSummary = `${{ steps.track-cost.outputs.accumulated-summary }}`;
+              
+              github.rest.repos.createDispatchEvent({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                event_type: '🏗️ Architect PR Review',
+                client_payload: {
+                  pr_number: prNumber,
+                  is_pr: true,
+                  issue_number: process.env.ISSUE_NUMBER,
+                  accumulated_summary: accumulatedSummary
+                }
+              });
+            } else {
+              console.log('No recent PRs found to review');
+            }
